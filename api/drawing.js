@@ -1,56 +1,89 @@
-// api/drawing.js - Обработчик рисунков на Vercel
+// api/drawing.js - ИСПРАВЛЕННАЯ ВЕРСИЯ ДЛЯ VERCEL
 export default async function handler(req, res) {
-    // Разрешаем запросы с GitHub Pages
+    // Разрешаем CORS
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-    // Обработка OPTIONS запроса (preflight)
+    // Обработка OPTIONS (preflight)
     if (req.method === 'OPTIONS') {
         return res.status(200).end();
     }
 
-    // Только POST запросы
+    // Только POST
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Метод не разрешен' });
     }
 
-    try {
-        // Получаем данные из FormData
-        const formData = await req.formData();
-        const file = formData.get('drawing');
-        const username = formData.get('username') || 'Аноним';
-        const message = formData.get('message') || '';
+    // 🔥 ТВОИ ДАННЫЕ
+    const BOT_TOKEN = '8459723955:AAGboGE1z2RZhXl9EjR5HVLIHY_UYyZfAnU';
+    const CHAT_ID = '5595487101';
 
-        if (!file) {
+    try {
+        // ⚡ ВАЖНО: получаем multipart/form-data через промис
+        const formData = await new Promise((resolve, reject) => {
+            const busboy = require('busboy')({ 
+                headers: req.headers,
+                limits: { fileSize: 10 * 1024 * 1024 } // 10MB максимум
+            });
+            
+            const fields = {};
+            let fileBuffer = null;
+            let filename = '';
+
+            busboy.on('file', (fieldname, file, info) => {
+                const chunks = [];
+                file.on('data', chunk => chunks.push(chunk));
+                file.on('end', () => {
+                    fileBuffer = Buffer.concat(chunks);
+                    filename = info.filename;
+                });
+            });
+
+            busboy.on('field', (fieldname, val) => {
+                fields[fieldname] = val;
+            });
+
+            busboy.on('finish', () => {
+                resolve({
+                    file: fileBuffer,
+                    filename,
+                    username: fields.username || 'Аноним',
+                    message: fields.message || ''
+                });
+            });
+
+            busboy.on('error', reject);
+            
+            // Включаем режим rawBody для Vercel
+            req.pipe(busboy);
+        });
+
+        if (!formData.file) {
             return res.status(400).json({ error: 'Нет рисунка' });
         }
 
-        // 🔥 ВСТАВЬ СВОИ ДАННЫЕ!
-        const BOT_TOKEN = '8459723955:AAGboGE1z2RZhXl9EjR5HVLIHY_UYyZfAnU';
-        const CHAT_ID = '5595487101';  // твой Telegram ID
-
-        // Конвертируем файл в Buffer
-        const arrayBuffer = await file.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-
         // Отправляем в Telegram
-        const formDataToTelegram = new FormData();
-        formDataToTelegram.append('chat_id', CHAT_ID);
-        formDataToTelegram.append('photo', new Blob([buffer], { type: 'image/png' }), 'drawing.png');
-        formDataToTelegram.append('caption', 
+        const telegramFormData = new FormData();
+        telegramFormData.append('chat_id', CHAT_ID);
+        
+        // Добавляем фото
+        const blob = new Blob([formData.file], { type: 'image/png' });
+        telegramFormData.append('photo', blob, 'drawing.png');
+        
+        telegramFormData.append('caption', 
             `🎨 НОВЫЙ РИСУНОК!\n\n` +
-            `👤 От: ${username}\n` +
-            `💬 Сообщение: ${message || '—'}\n` +
+            `👤 От: ${formData.username}\n` +
+            `💬 Сообщение: ${formData.message}\n` +
             `📅 Время: ${new Date().toLocaleString('ru-RU')}`
         );
 
-        const telegramResponse = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+        const tgResponse = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
             method: 'POST',
-            body: formDataToTelegram
+            body: telegramFormData
         });
 
-        const result = await telegramResponse.json();
+        const result = await tgResponse.json();
 
         if (result.ok) {
             return res.status(200).json({ success: true });
