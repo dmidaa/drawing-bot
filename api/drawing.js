@@ -72,10 +72,7 @@ export default async function handler(req, res) {
         telegramFormData.append('photo', blob, 'drawing.png');
         
         telegramFormData.append('caption', 
-            `🎨 НОВЫЙ РИСУНОК!\n\n` +
-            `👤 От: ${formData.username}\n` +
-            `💬 Сообщение: ${formData.message}\n` +
-            `📅 Время: ${new Date().toLocaleString('ru-RU')}`
+            `НОВЫЙ РИСУНОК!\n\n`
         );
 
         const tgResponse = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
